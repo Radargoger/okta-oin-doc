@@ -1,6 +1,6 @@
 # SOCRadar connector for Okta Workflows
 
-**Connector version: 0.7.0**
+**Connector version: 0.10.0**
 
 SOCRadar finds credentials that infostealer malware has stolen and published in botnet logs.
 This connector brings that data into Okta Workflows. A flow can match the exposed credentials to
@@ -31,8 +31,9 @@ values:
 1. Add a SOCRadar card to a flow.
 2. Click the connection field and choose **New Connection**.
 3. Enter a name, the **API key** and the **Company ID**. Save.
-4. Okta does not check the key on save. Run one Get Botnet Data call over a narrow window to test
-   it.
+4. The connector checks the connection with one call to the SOCRadar botnet endpoint over an
+   empty date window. On the card, a working connection shows **Connection successful** and a
+   wrong API key shows **Unable to connect**.
 
 ### Scopes
 
@@ -62,7 +63,7 @@ Group: **Query**
 | Label | Definition | Type | Required |
 |---|---|---|---|
 | `startDate` | Start of the window, included. Format `YYYY-MM-DD HH:mm:ss` | Text | Yes |
-| `endDate` | End of the window, not included. Same format | Text | Yes |
+| `endDate` | End of the window, not included. A time of `00:00:00` is the one exception. SOCRadar then reads it as the end of that day, so the day is included. Same format | Text | Yes |
 | `page` | Page number, starting at 1 | Text | Yes |
 | `limit` | Records per page, from 1 to 5000 | Text | Yes |
 
@@ -96,8 +97,8 @@ The records are at `data.data` in `Body`. The total for the whole window is at
   run still ends green.
 - An empty page does not mean the window is done. It is done when the records you fetched reach
   `total_data_count`.
-- Records come newest first. When you page across runs, fix `startDate` and `endDate` once for
-  the whole crawl. Otherwise records are skipped or read twice.
+- Do not rely on the order records arrive in. When you page across runs, fix `startDate` and
+  `endDate` once for the whole crawl. Otherwise records are skipped or read twice.
 - Records can contain passwords in clear text.
 
 ### Close Alarm
@@ -133,7 +134,8 @@ The same **Response** and **Result** groups as Get Botnet Data.
   `false`. Nothing changes.
 - Closing an alarm that already has the target status also returns `is_success` `false`. One
   alarm can cover several people, so a flow that closes it once per person sees this routinely.
-- A closed alarm leaves the feed and shifts the pages. Close alarms after a crawl has finished.
+- A closed alarm can leave the feed and shift the pages. Close alarms after a crawl has
+  finished.
 
 ## Performance
 
@@ -165,7 +167,7 @@ template show only `Status Code` and `Body`. Read `is_success` there with an **O
 | The run is green but no records were processed | SOCRadar rejected the request. Check `is_success` |
 | The card fails with `401` | The API key is wrong or was revoked. Edit the connection |
 | The card fails with `404` | The connection has no Company ID |
-| A card shows "Unable to connect" | The connector has no connection test, so this label does not prove a fault |
+| A card shows "Unable to connect" | The connection check failed. Check the API key and the Company ID |
 
 ## Related
 
