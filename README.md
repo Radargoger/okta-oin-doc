@@ -1,6 +1,6 @@
 # SOCRadar connector for Okta Workflows
 
-**Connector version: 0.10.0**
+**Connector version: 0.13.0**
 
 SOCRadar finds credentials that infostealer malware has stolen and published in botnet logs.
 This connector brings that data into Okta Workflows. A flow can match the exposed credentials to
@@ -35,6 +35,12 @@ values:
    empty date window. On the card, a working connection shows **Connection successful** and a
    wrong API key shows **Unable to connect**.
 
+5. Assign both connections, the SOCRadar connection and the Okta connection, to the folder
+   that holds your flows (**Connections**, open each connection, **Assign Folders**). Then open
+   every SOCRadar and Okta connector card in each flow, choose the connection on the card, and
+   save the flow. Assigning the folder is not enough on its own. A card with no connection
+   selected makes the first flow activation fail with HTTP 422 and no error text.
+
 ### Scopes
 
 None. The connector uses an API key.
@@ -62,10 +68,12 @@ Group: **Query**
 
 | Label | Definition | Type | Required |
 |---|---|---|---|
-| `startDate` | Start of the window, included. Format `YYYY-MM-DD HH:mm:ss` | Text | Yes |
-| `endDate` | End of the window, not included. A time of `00:00:00` is the one exception. SOCRadar then reads it as the end of that day, so the day is included. Same format | Text | Yes |
-| `page` | Page number, starting at 1 | Text | Yes |
-| `limit` | Records per page, from 1 to 5000 | Text | Yes |
+| Start Date | Start of the window, included. Format `YYYY-MM-DD HH:mm:ss` | Text | Yes |
+| End Date | End of the window, not included. A time of `00:00:00` is the one exception. SOCRadar then reads it as the end of that day, so the day is included. Same format | Text | Yes |
+| Page | Page number, starting at 1 | Text | Yes |
+| Limit | Records per page, from 1 to 5000 | Text | Yes |
+
+Dates use the format `YYYY-MM-DD HH:mm:ss` in UTC. The connector's date check also lets an ISO value with `T` and `Z`, such as `2026-11-17T10:00:00Z`, through to SOCRadar. The check reads only the digits of a value, so a time zone offset is not applied. A value the connector cannot read is not rejected by the flow. It is sent to SOCRadar as it is, and SOCRadar returns its own error response.
 
 **Outputs**
 
@@ -89,16 +97,22 @@ The records are at `data.data` in `Body`. The total for the whole window is at
 
 **Limitations and known issues**
 
-- A `limit` above 5000, or a date that cannot be read, is rejected with HTTP 200 and `is_success`
+- A Limit above 5000, or a date that cannot be read, is rejected with HTTP 200 and `is_success`
   `false`.
 - An empty required input fails the card with HTTP `400` before any request is sent.
-- A `page` of 0 returns page 1 again. A window that ends before it starts returns zero records.
+- A Page below 1 fails the card with HTTP `400` and the message `page must be 1 or greater`.
+- An End Date earlier than the Start Date fails the card with HTTP `400` and the message
+  `endDate must be later than startDate`. An End Date with the time `00:00:00` counts as the end
+  of that day, so it is accepted when it falls on the Start Date's day.
+- A date the connector can read has 14 digits or more once every character that is not a digit is
+  removed, or exactly 8 digits (a date only). Other values are passed to SOCRadar, which returns its
+  own validation error.
 - One Object Get on `data` returns an object, not the list. A For Each over it runs once, and the
   run still ends green.
 - An empty page does not mean the window is done. It is done when the records you fetched reach
   `total_data_count`.
-- Do not rely on the order records arrive in. When you page across runs, fix `startDate` and
-  `endDate` once for the whole crawl. Otherwise records are skipped or read twice.
+- Do not rely on the order records arrive in. When you page across runs, fix Start Date and
+  End Date once for the whole crawl. Otherwise records are skipped or read twice.
 - Records can contain passwords in clear text.
 
 ### Close Alarm
@@ -116,9 +130,9 @@ Group: **Body**
 
 | Label | Definition | Type | Required |
 |---|---|---|---|
-| `alarm_id` | The alarm to change | Number | Yes |
-| `status` | The target status code, listed below | Number | Yes |
-| `comments` | A note stored on the alarm | Text | No |
+| Alarm ID | The alarm to change | Number | Yes |
+| Status | The target status code, listed below | Number | Yes |
+| Comments | A note stored on the alarm | Text | No |
 
 Status codes: 0 OPEN, 1 INVESTIGATING, 2 RESOLVED, 4 PENDING_INFO, 5 LEGAL_REVIEW,
 6 VENDOR_ASSESSMENT, 9 FALSE_POSITIVE, 10 DUPLICATE, 11 PROCESSED_INTERNALLY, 12 MITIGATED,
@@ -130,7 +144,7 @@ The same **Response** and **Result** groups as Get Botnet Data.
 
 **Limitations and known issues**
 
-- An unknown `alarm_id` or an invalid `status` is rejected with HTTP 200 and `is_success`
+- An unknown Alarm ID or an invalid Status is rejected with HTTP 200 and `is_success`
   `false`. Nothing changes.
 - Closing an alarm that already has the target status also returns `is_success` `false`. One
   alarm can cover several people, so a flow that closes it once per person sees this routinely.
